@@ -56,10 +56,17 @@ if format == "JPEG":
 else:
     jpeg_quality = None
 text = st.text_input("追加する文字（空欄なら追加しません）", "")
-position = st.selectbox("文字位置", ["center", "bottom", "top"], index=0)
-bg_on = st.checkbox("背景をつける", value=True)
-bg_color = st.color_picker("背景色", "#000000")
-max_font_size = st.slider("最大フォントサイズ", 20, 100, 64)
+
+if text:
+    position = st.selectbox("文字位置", ["center", "top", "bottom"])
+    bg_on = st.checkbox("背景をつける", value=True)
+    bg_color = st.color_picker("背景色", "#000000")
+    max_font_size = st.slider("最大フォントサイズ", 20, 100, 64)
+else:
+    position = None
+    bg_on = None
+    bg_color = None
+    max_font_size = None
 
 if uploaded_files:
     resizer = ImageResizer(
