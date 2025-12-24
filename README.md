@@ -38,3 +38,5 @@ Streamlit を使ってブラウザ上で動作します。
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
+
+![app](image.png)
