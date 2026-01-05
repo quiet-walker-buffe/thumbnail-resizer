@@ -1,12 +1,23 @@
 import streamlit as st
 import io
 import zipfile
+import logging
 from PIL import Image
 from PIL import ImageOps
-from PIL import ImageDraw, ImageFont
+from typing import List
+from streamlit.runtime.uploaded_file_manager import UploadedFile
 from resize_core import ImageResizer
 
-def build_zip_from_images(files, resizer, format):
+
+logging.basicConfig(level=logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+
+def build_zip_from_images(
+    files: List[UploadedFile],
+    resizer: ImageResizer,
+    format: str,
+) -> io.BytesIO:
     zip_buf = io.BytesIO()
 
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zip_file:
@@ -17,10 +28,12 @@ def build_zip_from_images(files, resizer, format):
 
                 with st.spinner("画像を変換しています..."):
                     resized = resizer.resize_image(image.copy())
+                    st.image(resized, caption="変換後", use_container_width=True)
 
-            except Exception:
+            except Exception as e:
+                logger.exception("画像変換エラー")
                 st.error("画像の変換に失敗しました。別の画像を試してください。")
-                continue  # ← 重要
+                continue
 
             img_buf = io.BytesIO()
 
@@ -37,6 +50,20 @@ def build_zip_from_images(files, resizer, format):
     zip_buf.seek(0)
     return zip_buf
 
+DEFAULT_WIDTH = 1200
+DEFAULT_HEIGHT = 630
+
+width = DEFAULT_WIDTH
+height = DEFAULT_HEIGHT
+
+SIZE_PRESETS = {
+    "カスタム": None,
+    "note（1200×630）": (1200, 630),
+    "ブログOGP（1200×630）": (1200, 630),
+    "X（旧Twitter）": (1200, 675),
+    "YouTube サムネ": (1280, 720),
+}
+
 st.title("ブログ用サムネ画像リサイズ（複数対応）")
 
 uploaded_files = st.file_uploader(
@@ -46,8 +73,36 @@ uploaded_files = st.file_uploader(
 )
 
 # 設定受付
-width = st.number_input("幅 (px)", min_value=50, max_value=3000, value=1200)
-height = st.number_input("高さ (px)", min_value=50, max_value=3000, value=630)
+if "preset_name" not in st.session_state:
+    st.session_state.preset_name = "カスタム"
+
+
+preset_name = st.selectbox(
+    "サイズプリセット",
+    options=list(SIZE_PRESETS.keys()),
+    key="preset_name"
+)
+
+if st.session_state.preset_name != "カスタム":
+    preset_size = SIZE_PRESETS[st.session_state.preset_name]
+    width, height = preset_size
+
+width = st.slider(
+    "幅 (px)",
+    min_value=300,
+    max_value=2000,
+    value=width,
+    step=10
+)
+
+height = st.slider(
+    "高さ (px)",
+    min_value=300,
+    max_value=2000,
+    value=height,
+    step=10
+)
+
 suffix = st.text_input("ファイル名サフィックス", value="_thumb")
 format = st.selectbox("保存形式", ["JPEG", "PNG"], index=0)
 keep_aspect = st.checkbox("縦横比を維持する", value=True)
@@ -81,6 +136,8 @@ if uploaded_files:
         bg_color=bg_color,
         max_font_size=max_font_size
     )
+
+
 
     zip_buf = build_zip_from_images(uploaded_files, resizer, format)
 
