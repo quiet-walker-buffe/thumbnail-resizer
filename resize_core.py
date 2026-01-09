@@ -1,11 +1,12 @@
 from typing import Optional, Tuple
 from PIL import Image
-from PIL import ImageDraw, ImageFont
+from PIL import ImageDraw, ImageFont, ImageColor
 from pathlib import Path
 import logging
 
 BASE_DIR = Path(__file__).resolve().parent
-FONT_PATH = BASE_DIR / "fonts" / "NotoSansJP-VariableFont_wght.ttf"
+FONT_PATH = BASE_DIR / "fonts" / "NotoSansJP-Bold.ttf"
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,10 +20,14 @@ class ImageResizer:
         keep_aspect: bool = False,
         jpeg_quality: Optional[int] = 85,
         text: Optional[str] = None,
+        text_color: str = "#FFFFFF",
+        stroke_width=3,
+        stroke_color="#000000",
         position: str = "center",
-        bg_on: bool = True,
         bg_color: Tuple[int, int, int, int] = (0, 0, 0, 160),
-        max_font_size: int = 64,
+        bg_alpha: int = 160,
+        font_size: int = 64,
+        font_path: str = None,
     ) -> None:
 
         logger.debug("init start")
@@ -33,10 +38,14 @@ class ImageResizer:
         self.ext = format.lower()
         self.jpeg_quality = jpeg_quality
         self.text = text
+        self.text_color = text_color
+        self.stroke_width = stroke_width
+        self.stroke_color = stroke_color
         self.position = position
-        self.bg_on = bg_on
         self.bg_color = bg_color
-        self.max_font_size = max_font_size
+        self.bg_alpha = bg_alpha
+        self.font_size = font_size
+        self.font_path = font_path
         logger.debug("init end")
 
     def make_output_name(self, filename: str) -> str:
@@ -91,12 +100,21 @@ class ImageResizer:
             image.save(buf, format="PNG")
         logger.debug("save_image end")
 
+    def calc_stroke_width(self, font_size: int) -> int:
+        if font_size < 40:
+            return 1
+        elif font_size < 70:
+            return 2
+        else:
+            return 2
+
+    
     def draw_text(self, image: Image.Image, text: str, position: str = "center") -> None:
         logger.debug("draw_text start")
         draw = ImageDraw.Draw(image, "RGBA")
         img_w, img_h = image.size
         font = self._get_auto_font(draw, text, img_w)
-        
+        stroke_width = self.calc_stroke_width(self.font_size)
         # テキストサイズ取得
         bbox = draw.textbbox((0, 0), text, font=font)
         left, top, right, bottom = bbox
@@ -107,7 +125,6 @@ class ImageResizer:
 
         if position == "center":
             logger.debug("draw_text: center position")
-
             x = (img_w - text_w) // 2
             y = (img_h - text_h) // 2
         elif position == "top":
@@ -129,12 +146,25 @@ class ImageResizer:
             x + text_w + padding,
             y + text_h + padding
         )
-        if self.bg_on:
-            draw.rectangle(rect, fill=(0, 0, 0, 160))
+        if self.bg_alpha > 0:
+            r, g, b = ImageColor.getrgb(self.bg_color)
+            draw.rectangle(
+                rect,
+                fill=(r, g, b, self.bg_alpha)
+            )
+
         text_x = x - left
         text_y = y - top
         # 文字
-        draw.text((text_x, text_y), text, fill="white", font=font)
+
+        draw.text(
+            (text_x, text_y),
+            text, 
+            fill=self.text_color, 
+            font=font, 
+            stroke_width=stroke_width if stroke_width > 0 else 0, 
+            stroke_fill=self.stroke_color,
+        )
         logger.debug("draw_text end")
 
     def _get_auto_font(
@@ -143,10 +173,11 @@ class ImageResizer:
         text: str,
         image_width: int,
     ) -> ImageFont.FreeTypeFont:
-        font_size = self.max_font_size
+        font_size = self.font_size
 
         while font_size > 10:
-            font = ImageFont.truetype(str(FONT_PATH), font_size)
+            font = ImageFont.truetype(self.font_path, font_size)
+        
             bbox = draw.textbbox((0, 0), text, font=font)
             text_width = bbox[2] - bbox[0]
 
@@ -157,9 +188,10 @@ class ImageResizer:
 
         return ImageFont.truetype(str(FONT_PATH), 10)
 
-
     def _load_font(self, size):
         try:
             return ImageFont.truetype(self.font_path, size)
         except Exception:
             return ImageFont.load_default()
+
+
