@@ -46,5 +46,13 @@ Streamlit を使ってブラウザ上で動作します。
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
+```
+---
 
-![app](image.png)
+## 📸 UIイメージ
+
+### 1. 画像アップロード画面
+![画像アップロード画面](images/resizer_top.png)
+
+### 2. サイズ設定・プレビュー画面
+![サイズ設定とプレビュー](images/resizer_settings.png)
