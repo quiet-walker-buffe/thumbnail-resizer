@@ -13,6 +13,22 @@ logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
 
+FONT_OPTIONS = {
+    "ゴシック（太・目立つ）": {
+        "path": "fonts/NotoSansJP-Bold.ttf",
+        "default_size": 72
+    },
+    "ゴシック（標準）": {
+        "path": "fonts/NotoSansJP-Regular.ttf",
+        "default_size": 56
+    },
+    "丸ゴシック（やさしい）": {
+        "path": "fonts/MPLUSRounded1c-Regular.ttf",
+        "default_size": 60
+    }
+}
+
+
 def build_zip_from_images(
     files: List[UploadedFile],
     resizer: ImageResizer,
@@ -28,7 +44,6 @@ def build_zip_from_images(
 
                 with st.spinner("画像を変換しています..."):
                     resized = resizer.resize_image(image.copy())
-                    st.image(resized, caption="変換後", use_container_width=True)
 
             except Exception as e:
                 logger.exception("画像変換エラー")
@@ -63,86 +78,96 @@ SIZE_PRESETS = {
     "X（旧Twitter）（1200×675）": (1200, 675),
 }
 
-st.title("ブログ用サムネ画像リサイズ（複数対応）")
+keep_aspect: bool = False
+text: str = None
+font_path: str = None
+text_color: str = "white"
+#stroke_width: int = 3
+position: str = "top"
+bg_color: tuple = (0,0,0,160)
+bg_alpha: int = 160
+font_size: int = 64
+suffix: str = "_thumb"
+format: str = "JPEG"
+jpeg_quality: int = 85
+
+st.title("ブログ用サムネ画像リサイズ")
+st.caption("note・ブログ用のサムネ画像を、サイズ崩れなく一括生成できます")
+
 
 uploaded_files = st.file_uploader(
-    "画像をアップロード（複数可）",
+        "画像をアップロード（複数可）",
     type=["png", "jpg", "jpeg"],
     accept_multiple_files=True
 )
+left, right = st.columns([1, 1])
+with left:
+    if uploaded_files:
+        with st.expander("サイズ設定", expanded=True):
+#    if "preset_name" not in st.session_state:
+#        st.session_state.preset_name = "カスタム"
 
-# 設定受付
-if "preset_name" not in st.session_state:
-    st.session_state.preset_name = "カスタム"
+            preset_name = st.selectbox("サイズプリセット", options=list(SIZE_PRESETS.keys()), key="preset_name")
 
+            if st.session_state.preset_name != "カスタム":
+                preset_size = SIZE_PRESETS[st.session_state.preset_name]
+                width, height = preset_size
+            else:
+                width = st.slider( "幅 (px)", min_value=300, max_value=2000, value=width, step=10)
+                height = st.slider( "高さ (px)", min_value=300, max_value=2000, value=height, step=10)
+            keep_aspect = st.checkbox("縦横比を維持する", value=True)
+#        st.markdown("---")
+        with st.expander("テキスト設定", expanded=False):
+            text = st.text_input("追加する文字（空欄なら追加しません）", "")
+            if text:
+                font_label = st.selectbox("フォント（日本語向け）", options=list(FONT_OPTIONS.keys()))
+                font_info = FONT_OPTIONS[font_label]
+                font_path = font_info["path"]
+                default_font_size = font_info["default_size"]
+#        stroke_width = st.slider( "文字の縁取りの太さ", min_value=0, max_value=10, value=3)
+#        stroke_width = st.slider("文字の縁取り（0=OFF）", 0, 10, 5)
+                text_color = st.color_picker("文字色", "#FFFFFF")
+                position = st.selectbox("文字位置", ["center", "top", "bottom"])
+                bg_color = st.color_picker("背景色", "#000000")
+                bg_alpha = st.slider("文字背景の透過度", min_value=0, max_value=255, value=160)
+                font_size = st.slider("最大フォントサイズ", 20, 100, 64)
 
-preset_name = st.selectbox(
-    "サイズプリセット",
-    options=list(SIZE_PRESETS.keys()),
-    key="preset_name"
-)
+        resizer = ImageResizer(
+            size=(width, height),
+            keep_aspect=keep_aspect,
+            jpeg_quality=jpeg_quality,
+            text=text,
+            text_color=text_color,
+#        stroke_width=stroke_width,
+            position=position,
+            bg_color=bg_color,
+            bg_alpha=bg_alpha,
+            font_size=font_size,
+            font_path=font_path,
+            suffix=suffix,
+            format=format,
+        )
 
-if st.session_state.preset_name != "カスタム":
-    preset_size = SIZE_PRESETS[st.session_state.preset_name]
-    width, height = preset_size
+with right:
+    if uploaded_files:
+    # サンプル画像表示
+        first_file = uploaded_files[0]
+        image = Image.open(first_file)
+        image = ImageOps.exif_transpose(image)
+        preview = resizer.resize_image(image)
 
-width = st.slider(
-    "幅 (px)",
-    min_value=300,
-    max_value=2000,
-    value=width,
-    step=10
-)
+        st.subheader("プレビュー")
+        st.image(preview, width=400)
+        with st.expander("保存設定", expanded=False):
+            suffix = st.text_input("ファイル名（下のtextを末尾に追加して保存）", value="_thumb")
+            format = st.selectbox("保存形式", ["JPEG", "PNG"], index=0)
+            if format == "JPEG":
+                jpeg_quality = st.slider("JPEG品質", 50, 95, 85)
+            zip_buf = build_zip_from_images(uploaded_files, resizer, format)
 
-height = st.slider(
-    "高さ (px)",
-    min_value=300,
-    max_value=2000,
-    value=height,
-    step=10
-)
-
-suffix = st.text_input("ファイル名サフィックス", value="_thumb")
-format = st.selectbox("保存形式", ["JPEG", "PNG"], index=0)
-keep_aspect = st.checkbox("縦横比を維持する", value=True)
-if format == "JPEG":
-    jpeg_quality = st.slider("JPEG品質", 50, 95, 85)
-else:
-    jpeg_quality = None
-text = st.text_input("追加する文字（空欄なら追加しません）", "")
-
-if text:
-    position = st.selectbox("文字位置", ["center", "top", "bottom"])
-    bg_on = st.checkbox("背景をつける", value=True)
-    bg_color = st.color_picker("背景色", "#000000")
-    max_font_size = st.slider("最大フォントサイズ", 20, 100, 64)
-else:
-    position = None
-    bg_on = None
-    bg_color = None
-    max_font_size = None
-
-if uploaded_files:
-    resizer = ImageResizer(
-        size=(width, height),
-        suffix=suffix,
-        format=format,
-        keep_aspect=keep_aspect,
-        jpeg_quality=jpeg_quality,
-        text=text,
-        position=position,
-        bg_on=bg_on,
-        bg_color=bg_color,
-        max_font_size=max_font_size
-    )
-
-
-
-    zip_buf = build_zip_from_images(uploaded_files, resizer, format)
-
-    st.download_button(
-        label="ZIPでまとめてダウンロード",
-        data=zip_buf,
-        file_name="resized_images.zip",
-        mime="application/zip"
-    )
+        st.download_button(
+            label="ZIPでまとめてダウンロード",
+            data=zip_buf,
+            file_name="resized_images.zip",
+            mime="application/zip"
+        )
